@@ -9,8 +9,8 @@ Calibrates conditional probabilities of default (PD) according to Quasi Moment M
 Calibration is based on target accuracy ratio (AR) and mean portfolio PD (Central Tendency). For the information purposes, also AR standard deviation is estimated using bootstrap approach.
 }
 \usage{
-QMMRecalibrate(pd.uncond.new, pd.cond.old, portf.uncond,
-portf.condND = NULL, AR.target = NULL, rating.type = "RATING")
+QMMRecalibrate(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND = NULL,
+AR.target = NULL, rating.type = "RATING", calib.curve = "robust.logit")
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -34,12 +34,18 @@ Target accuracy ratio(AR), in case is NULL - implied by pd.cond.old AR is used (
 In case 'RATING', each item in the portf.uncond contains number of counterparts in a given rating class. \cr
 In case 'SCORE', each item in the portf.uncond is treated as an exact score of counterparty.
 }
+  \item{calib.curve}{
+In case 'logit', simple logit calibration curve is used (is applicable only for rating.type = 'SCORE'). \cr
+In case 'robust.logit', robust logit function is used (see Tasche D. (2013) for details).
+}
 }
 \details{
-PD curve is fitted using robust logit function proposed by D.Tasche.\cr
+PD curve is fitted using robust logit function proposed by D. Tasche.\cr
 For the information purposes output of the function also contains PD fitted using target CT and AR plus/minus one standard deviation.
 }
 \value{
+\item{alpha }{Itercept parameter of the calibration curve.}
+\item{beta }{Slope parameter of the calibration curve.}
 \item{CT.ac }{Mean PD after calibration, e.g. target CT.}
 \item{AR.ac }{AR after calibration, e.g. target AR.}
 \item{CT.bc }{Mean PD before calibration, as implied by conditional PDs and portfolio unconditional distribution.}

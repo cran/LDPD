@@ -12,8 +12,12 @@ PTOnePeriodPD <- function(portf.uncond, portf.def, conf.interval = 0.9) {
   portf.CDef <- rev(cumsum(portf.def)) 
   
   for (r in seq_len(r.num)) {
-    f <- function(x) pbinom(portf.CDef[r], portf.CNum[r], x) - 1 + conf.interval
-    r.PD[r] <- uniroot(f, c(0, 1))$root
+    if (portf.CDef[r] == portf.CNum[r]) {
+      r.PD[r] <- 1
+    } else {
+      f <- function(x) pbinom(portf.CDef[r], portf.CNum[r], x) - 1 + conf.interval
+      r.PD[r] <- uniroot(f, c(0, 1))$root
+    }
   }
   return(rev(r.PD))
 }
@@ -80,8 +84,12 @@ PTMultiPeriodPD <- function(portf.uncond, portf.def, rho, cor.St, kT, kNS = 1000
   rSt <- MASS::mvrnorm(n = kNS, rep(0, kT), Sigma = cor.ST)
   
   for (r in seq_len(r.num)) {  # Iterating through rating classes
-    f <- function(x) PTProbLessKdef(portf.CNum[r], portf.CDef[r], x, rho, rSt) - 1 + conf.interval
-    r.PD[r] <- uniroot(f, c(0, 1))$root
+    if (portf.CNum[r] == portf.CDef[r]) {
+      r.PD[r] <- 1
+    } else {
+      f <- function(x) PTProbLessKdef(portf.CNum[r], portf.CDef[r], x, rho, rSt) - 1 + conf.interval
+      r.PD[r] <- uniroot(f, c(0, 1))$root
+    }
   }
   return(rev(r.PD))
 }

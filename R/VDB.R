@@ -46,6 +46,7 @@ VDBCalibratePD <- function(portf.uncond, pd.uncond.old, pd.uncond.new, AR, ratin
   #   AR:               AR of the ranking model
   #   rating.type:      In case RATING, each item in the portf.uncond contains number of companies in a given rating class
   # Returns:
+  #   lambda:           convexity parameter of the calibration curve
   #   pd.cond:          conditional PDs after calibration 
   #   portf.cumdist:    cumulative portfolio distribution needed to estimate logit PDs (conditional on non-default if such data is given)
   #   portf.uncond:     unconditional portfolio distribution from the worst to the best credit quality
@@ -63,6 +64,7 @@ VDBCalibratePD <- function(portf.uncond, pd.uncond.old, pd.uncond.new, AR, ratin
   pd.cond <- pd.uncond.new * sapply(portf.dist, VDBCAPDer, k = k)
   
   rez <- list()
+  rez$lambda            <- k  
   rez$condPD           <- pd.cond
   rez$portf.cumdist    <- portf.dist
   rez$portf.uncond     <- ifelse(rating.type == 'RATING', 

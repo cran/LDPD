@@ -64,18 +64,24 @@ ARConfIntEst <- function(pd.cond, portf.uncond, rating.type = 'RATING', iter = 1
   
 }
 
-QMMPDlinkFunc <- function(x, alpha, betta) {
+QMMPDlinkFunc <- function(x, alpha, betta, calib.curve) {
   # Calculates PD given from a cumulative distribution function of a SCORE/RATING (based on logistic robust function)
   # Args:
-  #   x:      probability (value of a cumulative distribution function) to get a given RATING/SCORE
-  #   alpha:  intercept parameter of a robust logistic function
-  #   betta:  slope parameter of a robust logistic function
+  #   x:                in case calib.curve is 'logit'probability (value of a cumulative distribution function) to get a given RATING/SCORE
+  #   alpha:            intercept parameter of a robust logistic function
+  #   betta:            slope parameter of a robust logistic function
+  #   calib.curve:      Type of calibration curve: logit or robust.logit
   # Returns:
   #   Probability of default
-  return((1/(1 + exp(-alpha - betta * qnorm(x)))))
+  if (calib.curve == 'logit') {
+    rez <- 1 / (1 + exp(-alpha - betta * x))
+  } else {
+    rez <- 1 / (1 + exp(-alpha - betta * qnorm(x)))
+  }
+  return(rez)
 } 
 
-QMMGetRLogitPD <- function (alpha, betta, portf.uncond, portf.condND = NULL, rating.type = 'RATING') {
+QMMGetRLogitPD <- function (alpha, betta, portf.uncond, portf.condND = NULL, rating.type = 'RATING', calib.curve) {
   # Calculates cumulative distribution function of SCORES/RATINGS conditional on non-default and conditional PDs
   # given logit parameters and distribution of SCORES/RATINGS.
   # In case there is no forecast of conditional non-default distribution, unconditional distribution is used as a proxy 
@@ -86,6 +92,7 @@ QMMGetRLogitPD <- function (alpha, betta, portf.uncond, portf.condND = NULL, rat
   #   portf.uncond:   unconditional portfolio distribution from the worst to the best credit quality
   #   portf.condND:   conditional on non-default portfolio distribution from the worst to the best credit quality
   #   rating.type:    In case RATING, each item in the portf.uncond contains number of companies in a given rating class
+  #   calib.curve:      Type of calibration curve: logit or robust.logit
   # Returns:
   #   PD:             Conditional PD distribution
   #   condNDist:      Cumulative distribution of RATINGS/SCORES (in case non-default distribution is given - conditional n-d distribution)
@@ -94,11 +101,11 @@ QMMGetRLogitPD <- function (alpha, betta, portf.uncond, portf.condND = NULL, rat
         portf.condND <- portf.uncond
     }  
         
-    if (rating.type == 'RATING') { # converting number of borrowers in each rating class to  
-        portf.scores <- rep(seq_len(length(portf.condND)), portf.condND)
-    } else {
-        portf.scores <- portf.condND
-    }
+    #if (rating.type == 'RATING') { # converting number of borrowers in each rating class to  
+    #    portf.scores <- rep(seq_len(length(portf.condND)), portf.condND)
+    #} else {
+    #    portf.scores <- portf.condND
+    #}
     
     if (rating.type == 'RATING') { # Empirical distrivution function of non-defaulted borrowers
         portf.cum <- cumsum(portf.condND)
@@ -107,14 +114,19 @@ QMMGetRLogitPD <- function (alpha, betta, portf.uncond, portf.condND = NULL, rat
         portf.condNDist <- ecdf(portf.condND)(portf.condND)
         portf.condNDist[length(portf.condNDist)] <- (1 + portf.condNDist[length(portf.condNDist) - 1]) / 2 
     }
-      
-    rez <- list('PD' = QMMPDlinkFunc(portf.condNDist, alpha, betta)) # current conditional PD's given alpha and betta
+    
+    rez <- list()
+    if (calib.curve == 'logit') {
+      rez$PD <- QMMPDlinkFunc(portf.condND, alpha, betta, calib.curve) # current conditional PD's given alpha and betta
+    } else {
+      rez$PD <- QMMPDlinkFunc(portf.condNDist, alpha, betta, calib.curve) # current conditional PD's given alpha and betta
+    }
     rez$condNDist <- portf.condNDist
     return(rez) 
 
 }
 
-QMMakeTargetFunc <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND = NULL, AR.target = NULL, rating.type = 'RATING') {
+QMMakeTargetFunc <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND = NULL, AR.target = NULL, rating.type = 'RATING', calib.curve) {
   # Prepears function for optimization routine of 2 parameters robust logistic distribution to target AR and CT 
   # In case there is no forecast of conditional non-default distribution, unconditional distribution is used as a proxy 
   # Args:
@@ -125,6 +137,7 @@ QMMakeTargetFunc <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.con
   #                   If portf.condND is NULL, portf.uncond will be used instead   
   #   AR.target:      Target AR, in case is NULL - implied by pd.cond.old AR is used
   #   rating.type:    In case RATING, each item in the portf.uncond contains number of companies in a given rating class
+  #   calib.curve:      Type of calibration curve: logit or robust.logit
   # Returns:
   #   Two parameters function for optimization routine
    
@@ -138,7 +151,7 @@ QMMakeTargetFunc <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.con
     # Returns:
     #   y[1], y[2]:       difference between current AR(CT) and target AR(CT)  
     y <- numeric(2)
-    pd.cond.cur <- QMMGetRLogitPD(x[1], x[2], portf.uncond, portf.condND, rating.type)$PD 
+    pd.cond.cur <- QMMGetRLogitPD(x[1], x[2], portf.uncond, portf.condND, rating.type, calib.curve)$PD 
     cur <- ARestimate(pd.cond.cur, portf.uncond, rating.type)
     y[1] <- cur$AR - AR.target
     y[2] <- cur$CT - CT.target
@@ -146,7 +159,7 @@ QMMakeTargetFunc <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.con
   }
 }
 
-QMMRecalibrate <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND = NULL, AR.target = NULL, rating.type = 'RATING') {
+QMMRecalibrate <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND = NULL, AR.target = NULL, rating.type = 'RATING', calib.curve = 'robust.logit') {
   # Calibrates conditional probabilities of default according to Quasi Moment Matching algorithm
   # In case there is no forecast of conditional non-default distribution, unconditional distribution is used as a proxy 
   # Args:
@@ -157,7 +170,10 @@ QMMRecalibrate <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condN
   #                     If portf.condND is NULL, portf.uncond will be used instead   
   #   AR.target:        Target AR, in case is NULL - implied by pd.cond.old AR is used
   #   rating.type:      In case RATING, each item in the portf.uncond contains number of companies in a given rating class
+  #   calib.curve:      Type of calibration curve: logit or robust.logit
   # Returns:
+  #   alpha:           itercept parameter of the calibration function
+  #   beta:             slope parameter of the calibration function
   #   CT.ac:            mean PD after calibration, e.g. target CT
   #   AR.ac:            AR after calibration, e.g. target AR
   #   CT.bc:            mean PD before calibration, as implied conditional PDs and portfolio unconditional distribution
@@ -170,22 +186,27 @@ QMMRecalibrate <- function(pd.uncond.new, pd.cond.old, portf.uncond, portf.condN
   #   portf.cumdist:    cumulative portfolio distribution needed to estimate logit PDs (conditional on non-default if such data is given)
   #   portf.uncond:     unconditional portfolio distribution from the worst to the best credit quality
   #   rating.type:      In case RATING, each item in the portf.uncond contains number of companies in a given rating class  
-  optimfun <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.target, rating.type)
+  if (rating.type == 'RATING' & calib.curve =='logit') {
+    stop("Simple logit calibration curve is applicable only for rating.type = \'SCORE\'")
+  }
+  optimfun <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.target, rating.type, calib.curve)
   params <- nleqslv::nleqslv(c(0,0), optimfun)
-  calib.new <- QMMGetRLogitPD(params$x[1], params$x[2], portf.uncond, portf.condND, rating.type)
+  calib.new <- QMMGetRLogitPD(params$x[1], params$x[2], portf.uncond, portf.condND, rating.type, calib.curve)
   ar.sdev <- ARConfIntEst(pd.cond.old, portf.uncond, rating.type)
   
   AR.bc <- ARestimate(pd.cond.old, portf.uncond, rating.type)
   AR.ac <- ARestimate(calib.new$PD, portf.uncond, rating.type)
   
-  optimfun.sd.minus <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.ac$AR - ar.sdev, rating.type)
-  optimfun.sd.plus <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.ac$AR + ar.sdev, rating.type)
+  optimfun.sd.minus <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.ac$AR - ar.sdev, rating.type, calib.curve)
+  optimfun.sd.plus <- QMMakeTargetFunc(pd.uncond.new, pd.cond.old, portf.uncond, portf.condND, AR.ac$AR + ar.sdev, rating.type, calib.curve)
   params.sd.minus <- nleqslv::nleqslv(c(0,0), optimfun.sd.minus)
   params.sd.plus <- nleqslv::nleqslv(c(0,0), optimfun.sd.plus)
-  calib.sd.minus <- QMMGetRLogitPD(params.sd.minus$x[1], params.sd.minus$x[2], portf.uncond, portf.condND, rating.type)
-  calib.sd.plus <- QMMGetRLogitPD(params.sd.plus$x[1], params.sd.plus$x[2], portf.uncond, portf.condND, rating.type)
+  calib.sd.minus <- QMMGetRLogitPD(params.sd.minus$x[1], params.sd.minus$x[2], portf.uncond, portf.condND, rating.type, calib.curve)
+  calib.sd.plus <- QMMGetRLogitPD(params.sd.plus$x[1], params.sd.plus$x[2], portf.uncond, portf.condND, rating.type, calib.curve)
   
   rez <- list()
+  rez$alpha            <- params$x[1]
+  rez$beta             <- params$x[2]  
   rez$CT.ac            <- AR.ac$CT
   rez$AR.ac            <- AR.ac$AR
   rez$CT.bc            <- AR.bc$CT

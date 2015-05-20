@@ -33,6 +33,7 @@ In case 'SCORE', each item in the portf.uncond is treated as an exact score of c
 One parameter approximation of CAP curve is used. Parameter is fitted in the way that the AUC (Cumulative Accuracy Profile)  implied by the provided AR should be equal to the area under the approximation curve. 
 }
 \value{
+\item{lambda }{Convexity parameter of the calibration curve.}
 \item{pd.cond }{Conditional PDs after calibration.}
 \item{portf.cumdist }{Cumulative portfolio distribution needed to estimate logit PDs (conditional on non-default if such data is given).}
 \item{portf.uncond }{Unconditional portfolio distribution from the worst to the best credit quality.}
